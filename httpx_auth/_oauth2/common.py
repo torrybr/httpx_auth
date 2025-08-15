@@ -84,6 +84,23 @@ def request_new_grant_with_post(
     return token, content.get("expires_in"), content.get("refresh_token")
 
 
+async def async_request_new_grant_with_post(
+    url: str, data, grant_name: str, client: httpx.AsyncClient
+) -> (str, int, str):
+    """Asynchronous version of :func:`request_new_grant_with_post`."""
+    response = await client.post(url, data=data)
+
+    if response.is_error:
+        # As described in https://tools.ietf.org/html/rfc6749#section-5.2
+        raise InvalidGrantRequest(response)
+
+    content = _content_from_response(response)
+    token = content.get(grant_name)
+    if not token:
+        raise GrantNotProvided(grant_name, content)
+    return token, content.get("expires_in"), content.get("refresh_token")
+
+
 class OAuth2:
     token_cache = TokenMemoryCache()
     display = DisplaySettings()

@@ -1,12 +1,15 @@
 import copy
 from hashlib import sha512
-from typing import Union, Iterable
+from typing import Union, Iterable, AsyncGenerator
 
 import httpx
 from httpx_auth._authentication import SupportMultiAuth
+from httpx_auth._errors import AuthenticationFailed
 from httpx_auth._oauth2.common import (
+    OAuth2,
     OAuth2BaseAuth,
     request_new_grant_with_post,
+    async_request_new_grant_with_post,
     _add_parameters,
 )
 
@@ -99,6 +102,48 @@ class OAuth2ClientCredentials(OAuth2BaseAuth, SupportMultiAuth):
     def _configure_client(self, client: httpx.Client):
         client.auth = (self.client_id, self.client_secret)
         client.timeout = self.timeout
+
+
+class AsyncOAuth2ClientCredentials(OAuth2ClientCredentials):
+    """Asynchronous variant of :class:`OAuth2ClientCredentials`."""
+
+    async def async_auth_flow(
+        self, request: httpx.Request
+    ) -> AsyncGenerator[httpx.Request, httpx.Response]:
+        try:
+            token = OAuth2.token_cache.get_token(
+                self.state, early_expiry=self.early_expiry
+            )
+        except AuthenticationFailed:
+            with OAuth2.token_cache._forbid_concurrent_missing_token_function_call:
+                try:
+                    token = OAuth2.token_cache.get_token(
+                        self.state, early_expiry=self.early_expiry
+                    )
+                except AuthenticationFailed:
+                    state, token, expires_in = await self.request_new_token()
+                    OAuth2.token_cache._add_access_token(
+                        state, token, expires_in
+                    )
+        self._update_user_request(request, token)
+        yield request
+
+    async def request_new_token(self) -> tuple:
+        client = self.client or httpx.AsyncClient()
+        self._configure_client(client)
+        try:
+            token, expires_in, _ = await async_request_new_grant_with_post(
+                self.token_url, self.data, self.token_field_name, client
+            )
+        finally:
+            if self.client is None:
+                await client.aclose()
+        return (self.state, token, expires_in)
+
+    def auth_flow(self, request: httpx.Request):  # pragma: no cover - sync not supported
+        raise RuntimeError(
+            "AsyncOAuth2ClientCredentials is only compatible with httpx.AsyncClient"
+        )
 
 
 class OktaClientCredentials(OAuth2ClientCredentials):
