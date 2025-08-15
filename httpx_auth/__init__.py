@@ -17,6 +17,7 @@ from httpx_auth._oauth2.authorization_code_pkce import (
 )
 from httpx_auth._oauth2.client_credentials import (
     OAuth2ClientCredentials,
+    AsyncOAuth2ClientCredentials,
     OktaClientCredentials,
 )
 from httpx_auth._oauth2.implicit import (
@@ -60,6 +61,7 @@ __all__ = [
     "OAuth2AuthorizationCode",
     "OktaAuthorizationCode",
     "OAuth2ClientCredentials",
+    "AsyncOAuth2ClientCredentials",
     "OktaClientCredentials",
     "OAuth2ResourceOwnerPasswordCredentials",
     "OktaResourceOwnerPasswordCredentials",
